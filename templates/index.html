@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Real-time Fraud Detection</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        .container { max-width: 1200px; margin: 20px auto; padding: 20px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .stats { background: #f5f5f5; padding: 15px; border-radius: 5px; }
+        .input-group { margin: 20px 0; }
+        input { padding: 10px; width: 150px; margin: 5px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; }
+        .alert { padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .alert-danger { background: #ffebee; color: #c62828; }
+        .alert-success { background: #e8f5e9; color: #2e7d32; }
+        .statistics-panel { margin-top: 20px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .stat-item { background: #f9f9f9; padding: 10px; border-radius: 5px; text-align: center; }
+        .update-time { font-size: 0.9em; color: #666; text-align: right; margin-top: 10px; }
+        
+        .dashboard-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-icon {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #007bff;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #2c3e50;
+        }
+
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+
+        .input-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .gauge-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Real-time Fraud Detection System</h1>
+        
+        <div class="dashboard-stats">
+            <div class="stat-card">
+                <i class="fas fa-exchange-alt stat-icon"></i>
+                <div class="stat-value" id="total-transactions">{{ stats.get('total_transactions', 0) }}</div>
+                <div class="stat-label">Total Transactions</div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-exclamation-triangle stat-icon"></i>
+                <div class="stat-value" id="fraud-cases">{{ stats.get('fraud_cases', 0) }}</div>
+                <div class="stat-label">Fraud Cases</div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-check-circle stat-icon"></i>
+                <div class="stat-value" id="normal-cases">{{ stats.get('normal_cases', 0) }}</div>
+                <div class="stat-label">Normal Cases</div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-dollar-sign stat-icon"></i>
+                <div class="stat-value" id="avg-amount">${{ "%.2f"|format(stats.get('average_amount', 0.00)) }}</div>
+                <div class="stat-label">Average Amount</div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-percentage stat-icon"></i>
+                <div class="stat-value" id="fraud-rate">{{ "%.1f"|format(stats.get('fraud_rate', 0.00)) }}%</div>
+                <div class="stat-label">Fraud Rate</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="input-panel">
+                <h3>Enter Transaction Details</h3>
+                <input type="number" id="amount" placeholder="Amount" step="0.01">
+                <div id="v-inputs"></div>
+                <button onclick="analyzeTransaction()">Analyze Transaction</button>
+                <div id="result"></div>
+            </div>
+            
+            <div class="gauge-container">
+                <div id="gauge"></div>
+            </div>
+        </div>
+
+        <form id="transactionForm">
+            <!-- ...existing form fields... -->
+        </form>
+    </div>
+
+    <script>
+        // Generate V1-V28 input fields
+        const vInputs = document.getElementById('v-inputs');
+        for (let i = 1; i <= 28; i++) {
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.id = `V${i}`;
+            input.placeholder = `V${i}`;
+            input.step = '0.000001';
+            vInputs.appendChild(input);
+        }
+
+        function analyzeTransaction() {
+            const data = {
+                Amount: parseFloat(document.getElementById('amount').value)
+            };
+            
+            // Get V1-V28 values
+            for (let i = 1; i <= 28; i++) {
+                const value = document.getElementById(`V${i}`).value;
+                if (value) {
+                    data[`V${i}`] = parseFloat(value);
+                }
+            }
+
+            fetch('/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                showResult(data);
+                updateGauge(data.risk_score);
+                // Immediately update statistics after transaction
+                updateStats();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showError('Failed to process transaction');
+            });
+        }
+
+        function updateStats() {
+            fetch('/stats')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(stats => {
+                    // Format and update each statistic
+                    document.getElementById('total-transactions').textContent = stats.total_transactions;
+                    document.getElementById('fraud-cases').textContent = stats.fraud_cases;
+                    document.getElementById('normal-cases').textContent = stats.normal_cases;
+                    
+                    // Format average amount with dollar sign and 2 decimal places
+                    const avgAmount = parseFloat(stats.average_amount || 0).toFixed(2);
+                    document.getElementById('avg-amount').textContent = `$${avgAmount}`;
+                    
+                    // Format fraud rate with percentage and 1 decimal place
+                    const fraudRate = parseFloat(stats.fraud_rate || 0).toFixed(1);
+                    document.getElementById('fraud-rate').textContent = `${fraudRate}%`;
+                })
+                .catch(error => {
+                    console.error('Error updating stats:', error);
+                });
+        }
+
+        function formatStatValue(type, value) {
+            switch(type) {
+                case 'recent_avg_amount':
+                    return `$${value.toFixed(2)}`;
+                case 'recent_fraud_rate':
+                    return `${value.toFixed(1)}%`;
+                default:
+                    return value.toString();
+            }
+        }
+
+        function showError(message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h3>Error</h3>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+
+        function showResult(data) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <div class="alert ${data.is_fraudulent ? 'alert-danger' : 'alert-success'}">
+                    <h3>${data.is_fraudulent ? 'Suspicious Transaction Detected!' : 'Normal Transaction'}</h3>
+                    <p>Risk Score: ${(data.risk_score * 100).toFixed(1)}%</p>
+                    <p>Amount: $${data.amount.toFixed(2)}</p>
+                    <p>Time: ${data.timestamp}</p>
+                </div>
+            `;
+        }
+
+        function updateGauge(score) {
+            const data = [{
+                type: "indicator",
+                mode: "gauge+number",
+                value: score,
+                title: { text: "Risk Score" },
+                gauge: {
+                    axis: { range: [0, 1] },
+                    bar: { color: "darkblue" },
+                    steps: [
+                        { range: [0, 0.3], color: "lightgreen" },
+                        { range: [0.3, 0.7], color: "yellow" },
+                        { range: [0.7, 1], color: "red" }
+                    ]
+                }
+            }];
+            Plotly.newPlot('gauge', data);
+        }
+
+        // Update stats more frequently (every 2 seconds)
+        setInterval(updateStats, 2000);
+        // Initial stats update
+        updateStats();
+    </script>
+</body>
+</html>
+``` 
