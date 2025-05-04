@@ -1,4 +1,4 @@
-# Real-Time-Fraude-detection-system
+
 # Real-Time Fraud Detection System
 
 A sophisticated web-based application that provides real-time transaction monitoring and fraud detection using statistical analysis and machine learning algorithms. The system processes financial transactions, calculates risk scores, and provides immediate feedback on potential fraudulent activities.
